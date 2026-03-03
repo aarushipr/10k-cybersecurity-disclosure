@@ -1,6 +1,6 @@
 # 10-K Cybersecurity Disclosure Quality Scorer
 
-This project measures the quality of cybersecurity and risk disclosures in SEC 10-K filings by analyzing **Item 1A (Risk Factors)** and **Item 1C (Cybersecurity, 2023+)** sections across a sample of **43 publicly listed companies** from **7 sectors** over fiscal years **2022–2025**.
+This project measures the quality of cybersecurity and risk disclosures in SEC 10-K filings by analyzing **Item 1A (Risk Factors)** and **Item 1C (Cybersecurity, 2023+)** sections across a sample of **41 publicly listed companies** from **7 sectors** over fiscal years **2022–2025**.
 
 ---
 
@@ -20,7 +20,7 @@ sec-cyber-extraction/
 │   ├── ...
 │   └── WGO_2025.txt
 │
-├── scoring/                   # Step 2–7 — All scoring scripts
+├── code/                   # Step 2–7 — All scoring scripts
 │   ├── length_analysis.py     #   Word-count analysis (Item 1A, 1C, combined)
 │   ├── boilerplate_detector.py#   Boilerplate phrase ratio detection
 │   ├── cosine_similarity.py   #   Year-over-year cosine similarity (TF-IDF)
@@ -206,7 +206,7 @@ python scoring/cosine_similarity.py
 ### Step 5 — Content scoring (LLM)
 
 ```bash
-python scoring/content_scoring.py
+python code/content_scoring.py
 ```
 
 - Reads `.txt` files from `data/`
@@ -216,7 +216,7 @@ python scoring/content_scoring.py
 ### Step 6 — Taxonomy scoring (NIST CSF 2.0)
 
 ```bash
-python scoring/taxonomy_scoring.py
+python code/taxonomy_scoring.py
 ```
 
 - Reads `filings.parquet`
@@ -227,7 +227,7 @@ python scoring/taxonomy_scoring.py
 ### Step 7 — Specificity scoring
 
 ```bash
-python scoring/specificity_scoring.py
+python code/specificity_scoring.py
 ```
 
 - Merges content scores + boilerplate ratios
@@ -238,7 +238,7 @@ python scoring/specificity_scoring.py
 ### Step 8 — Delta scoring
 
 ```bash
-python scoring/delta_scoring.py
+python code/delta_scoring.py
 ```
 
 - Merges specificity scores with year-over-year similarity
@@ -248,7 +248,7 @@ python scoring/delta_scoring.py
 ### Step 9 — Quality scoring
 
 ```bash
-python scoring/quality_scoring.py
+python code/quality_scoring.py
 ```
 
 - Reads `delta_results.csv`
@@ -274,9 +274,9 @@ Each visualizer reads its corresponding results from `results/` and saves figure
 
 ## Output Summary
 
-| Output location     | Contents                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| `data/`           | Raw extracted filing texts — one `.txt` per company-year (163 files)              |
+| Output location   | Contents                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `data/`           | Raw extracted filing texts — one `.txt` per company-year (163 files)                 |
 | `filings.parquet` | Consolidated extraction table (ticker, company, sector, year, has_1c, combined_text) |
 | `results/`        | All intermediate and final scoring results (CSV, Parquet, XLSX)                      |
 | `visuals/`        | All generated figures organized by analysis type (PNG)                               |
@@ -302,5 +302,5 @@ Each visualizer reads its corresponding results from `results/` and saves figure
 - **Item 1C** was introduced by the SEC in 2023, so 2022 filings contain Item 1A only. The `has_1c` column flags this.
 - The `data/` folder serves as a raw backup. If the parquet ever needs to be rebuilt, it can be done from these files without re-hitting the EDGAR API.
 - Content scoring requires a Gemini API key and is rate-limited to ~15 requests/minute (free tier).
-- The boilerplate phrase dictionary can be extended in `scoring/boilerplate_detector.py` under `BOILERPLATE_PHRASES`.
+- The boilerplate phrase dictionary can be extended in `code/boilerplate_detector.py` under `BOILERPLATE_PHRASES`.
 - Some filings require manual URL overrides in `extraction.py` (see `MANUAL_OVERRIDES` dict).
