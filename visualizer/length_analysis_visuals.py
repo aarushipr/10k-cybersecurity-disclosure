@@ -313,6 +313,7 @@ ax1.set_ylabel("Item 1A Mean Word Count", color=BLUE)
 ax1.tick_params(axis="y", labelcolor=BLUE)
 ax1.yaxis.set_major_formatter(mticker.FuncFormatter(fmt_thousands))
 ax1.set_xticks([2022, 2023, 2024, 2025])
+ax1.set_ylim(15000, 18000)
 
 ax2.set_ylabel("Item 1C Mean Word Count", color=ORANGE)
 ax2.tick_params(axis="y", labelcolor=ORANGE)

@@ -1,21 +1,3 @@
-"""
-10-K Quality Score Analysis – Quality Score Visualization Script
-Produces 3 main text figures + 2 appendix figures.
-
-MAIN TEXT:
-fig_quality_by_year.png     – mean quality score over time with jittered dots
-fig_quality_by_sector.png   – mean quality score by sector (bar + SD)
-fig_quality_by_1c.png       – quality score: Item 1C adopters vs non-adopters
-
-APPENDIX:
-figA_quality_by_size.png    – quality score boxplot by firm size
-figA_quality_heatmap.png    – heatmap: all firms × all years
-
-Requirements: pandas, matplotlib, seaborn, numpy
-Usage: python quality_visuals.py
-Input: quality_results.csv (same directory)
-"""
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -222,9 +204,27 @@ plt.savefig(out("quality_by_size.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved quality_by_size.png")
 
-# Fig: Heatmap: All Firms × All Years
+# Fig: Heatmap: All Firms × All Years, clustered by firm size
 pivot = df_scored.pivot_table(index="ticker", columns="year", values="quality_score")
-pivot = pivot.sort_values(by=sorted(pivot.columns))
+
+# Per-cell has_1c lookup
+has_1c_cell = df_scored.set_index(["ticker", "year"])["has_1c"].to_dict()
+
+# Sort by size group, then by mean score descending within each group
+size_map = df_scored[["ticker", "size"]].drop_duplicates().set_index("ticker")["size"]
+pivot["_size_order"] = pivot.index.map(size_map).map(
+    {s: i for i, s in enumerate(SIZE_ORDER)}
+)
+year_cols = [c for c in pivot.columns if c != "_size_order"]
+pivot["_mean"] = pivot[year_cols].mean(axis=1)
+pivot = pivot.sort_values(by=["_size_order", "_mean"], ascending=[True, False])
+pivot = pivot.drop(columns=["_size_order", "_mean"])
+
+size_labels = size_map.reindex(pivot.index)
+group_sizes = [
+    int((size_labels == s).sum()) for s in SIZE_ORDER if s in size_labels.values
+]
+active_sizes = [s for s in SIZE_ORDER if s in size_labels.values]
 
 fig, ax = plt.subplots(figsize=(7, 13))
 sns.heatmap(
@@ -241,9 +241,67 @@ sns.heatmap(
     annot_kws={"size": 8},
 )
 
+# Orange-free border on cells WITHOUT Item 1C
+from matplotlib.patches import Patch
+
+for row_idx, ticker in enumerate(pivot.index):
+    for col_idx, year in enumerate(pivot.columns):
+        if not has_1c_cell.get((ticker, year), True):
+            rect = plt.Rectangle(
+                (col_idx, row_idx),
+                1,
+                1,
+                fill=False,
+                edgecolor="#C0504D",
+                lw=2.0,
+                clip_on=True,
+            )
+            ax.add_patch(rect)
+
+# Legend for Item 1C border
+legend_elements = [
+    Patch(facecolor="none", edgecolor="#C0504D", lw=2.0, label="No Item 1C")
+]
+ax.legend(handles=legend_elements, loc="upper right", fontsize=9, framealpha=0.8)
+
+# Dashed divider lines between size groups
+cumulative_boundaries = np.cumsum(group_sizes[:-1])
+for boundary in cumulative_boundaries:
+    ax.axhline(boundary, color="black", lw=1.5, ls="--")
+
+# Dark gray side bars with rotated size labels and small gaps
+ax_pos = ax.get_position()
+group_start = 0
+for sz, count in zip(active_sizes, group_sizes):
+    y_top = (group_start + count) / len(pivot)
+
+    gap = 0.004
+    fig_y0 = ax_pos.y0 + (1 - y_top) * ax_pos.height + gap
+    fig_height = (count / len(pivot)) * ax_pos.height - 2 * gap
+    fig_x0 = ax_pos.x1 + 0.005
+
+    label_ax = fig.add_axes([fig_x0, fig_y0, 0.025, fig_height])
+    label_ax.set_facecolor("#4A4A4A")
+    label_ax.set_xticks([])
+    label_ax.set_yticks([])
+    for spine in label_ax.spines.values():
+        spine.set_visible(False)
+    label_ax.text(
+        0.5,
+        0.5,
+        sz,
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontweight="bold",
+        color="white",
+        rotation=90,
+        transform=label_ax.transAxes,
+    )
+    group_start += count
+
 ax.set_xlabel("Fiscal Year")
 ax.set_ylabel("")
-plt.tight_layout()
 plt.savefig(out("quality_heatmap.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved quality_heatmap.png")

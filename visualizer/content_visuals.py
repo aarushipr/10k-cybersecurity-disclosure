@@ -221,43 +221,23 @@ plt.close()
 print("Saved content_by_sector.png")
 
 
-# Fig: Specificity score boxplot by firm size
-size_means = df.groupby("size")["content_score"].mean()
-
-fig, ax = plt.subplots(figsize=(8, 5))
-sns.boxplot(
-    data=df,
-    x="size",
-    y="content_score",
-    order=SIZE_ORDER,
-    color=BLUE,
-    ax=ax,
-    flierprops=dict(marker=".", markersize=5, alpha=0.5),
-)
-
-ymax = df["content_score"].quantile(0.98)
-for i, sz in enumerate(SIZE_ORDER):
-    ax.text(
-        i,
-        size_means[sz] + 0.04,
-        f"Mean\n{size_means[sz]:.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=9,
-    )
-
-ax.set_xlabel("Firm Size")
-ax.set_ylabel("Content Score (0–1)")
-ax.set_ylim(-0.05, 1.15)
-plt.tight_layout()
-plt.savefig(out("content_by_size.png"), dpi=150, bbox_inches="tight")
-plt.close()
-print("Saved content_score_by_size.png")
-
-
-# Fig: Heatmap: all firms × all years
+# Fig: Heatmap: all firms × all years, clustered by firm size
 pivot = df.pivot_table(index="ticker", columns="year", values="content_score")
-pivot = pivot.sort_values(by=[2022, 2023, 2024, 2025])
+
+size_map = df[["ticker", "size"]].drop_duplicates().set_index("ticker")["size"]
+pivot["_size_order"] = pivot.index.map(size_map).map(
+    {s: i for i, s in enumerate(SIZE_ORDER)}
+)
+year_cols = [c for c in pivot.columns if c != "_size_order"]
+pivot["_mean"] = pivot[year_cols].mean(axis=1)
+pivot = pivot.sort_values(by=["_size_order", "_mean"], ascending=[True, False])
+pivot = pivot.drop(columns=["_size_order", "_mean"])
+
+size_labels = size_map.reindex(pivot.index)
+group_sizes = [
+    int((size_labels == s).sum()) for s in SIZE_ORDER if s in size_labels.values
+]
+active_sizes = [s for s in SIZE_ORDER if s in size_labels.values]
 
 fig, ax = plt.subplots(figsize=(7, 13))
 sns.heatmap(
@@ -274,9 +254,72 @@ sns.heatmap(
     annot_kws={"size": 8},
 )
 
+# Build per-cell has_1c lookup: (ticker, year) -> bool
+has_1c_cell = df.set_index(["ticker", "year"])["has_1c"].to_dict()
+
+# Draw orange border on individual cells WITHOUT Item 1C
+for row_idx, ticker in enumerate(pivot.index):
+    for col_idx, year in enumerate(pivot.columns):
+        if not has_1c_cell.get((ticker, year), True):
+            rect = plt.Rectangle(
+                (col_idx, row_idx),
+                1,
+                1,
+                fill=False,
+                edgecolor="#C0504D",
+                lw=2.0,
+                clip_on=True,
+            )
+            ax.add_patch(rect)
+
+# Legend for Item 1C border
+from matplotlib.patches import Patch
+
+legend_elements = [
+    Patch(facecolor="none", edgecolor="#C0504D", lw=2.0, label="No Item 1C")
+]
+ax.legend(handles=legend_elements, loc="upper right", fontsize=9, framealpha=0.8)
+
+# Divider lines between size groups
+cumulative_boundaries = np.cumsum(group_sizes[:-1])
+for boundary in cumulative_boundaries:
+    ax.axhline(boundary, color="black", lw=1.5, ls="--")
+
+# Dark gray side bars with rotated size labels
+ax_pos = ax.get_position()
+group_start = 0
+for sz, count in zip(active_sizes, group_sizes):
+    y_bottom = group_start / len(pivot)
+    y_top = (group_start + count) / len(pivot)
+    y_mid = (y_bottom + y_top) / 2
+
+    gap = 0.004  # small gap at top and bottom of each bar
+    fig_y0 = ax_pos.y0 + (1 - y_top) * ax_pos.height + gap
+    fig_height = (count / len(pivot)) * ax_pos.height - 2 * gap
+    fig_x0 = ax_pos.x1 + 0.005
+
+    label_ax = fig.add_axes([fig_x0, fig_y0, 0.025, fig_height])
+    label_ax.set_facecolor("#4A4A4A")
+    label_ax.set_xticks([])
+    label_ax.set_yticks([])
+    for spine in label_ax.spines.values():
+        spine.set_visible(False)
+    label_ax.text(
+        0.5,
+        0.5,
+        sz,
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontweight="bold",
+        color="white",
+        rotation=90,
+        transform=label_ax.transAxes,
+    )
+    group_start += count
+
 ax.set_xlabel("Fiscal Year")
 ax.set_ylabel("")
-plt.tight_layout()
 plt.savefig(out("content_heatmap.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved content_heatmap.png")
